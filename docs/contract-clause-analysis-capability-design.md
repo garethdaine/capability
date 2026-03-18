@@ -561,7 +561,7 @@ lint → unit test → integration test → build → deploy
 
 **Infrastructure-as-code** — AWS CDK (TypeScript), matching the backend language. Defines ECS services, RDS instance, SQS queues, S3 buckets, Cognito user pool, and networking. All infrastructure changes go through the same PR and CI process as application code.
 
-**Service deployment** — The Fastify backend and Docling microservice deploy independently as separate ECS services. Each has its own task definition, scaling policy, and health check. Independent deployments mean a Docling update doesn't require a backend redeploy, and vice versa. The Next.js frontend deploys to Vercel (or as a static export to S3 + CloudFront) — separate from the backend release cycle.
+**Service deployment** — The Fastify backend and Docling microservice deploy independently as separate ECS services. Each has its own task definition, scaling policy, and health check. Independent deployments mean a Docling update doesn't require a backend redeploy, and vice versa. The Next.js frontend deploys as a static export to S3 + CloudFront — separate from the backend release cycle, and consistent with the AWS-native infrastructure.
 
 **Zero-downtime deploys** — ECS rolling update strategy. New task instances register with the load balancer, pass health checks, then old instances drain and stop. Minimum healthy percentage set to 100% so capacity never drops during deploys.
 

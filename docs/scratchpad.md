@@ -110,6 +110,20 @@ Design the first working version of a "Contract Clause Analysis" capability for 
 3. **GDPR/data residency** (Section 9): Added subsection on single-region deployment, data residency, and GDPR right-to-deletion with audit log redaction approach
 4. **Verification badges in UX** (Section 4, Screen 4): Added "Verified"/"Under Review" badge description with cross-reference to Section 2.4
 
+### Turn 15 — Re-review after Testing/CI/CD/Deployment added
+- Full re-read of document (653 lines, 15 sections)
+- New Section 11 verified: testing strategy, CI/CD pipeline, deployment, V1 simplifications — all consistent with tech stack
+- Section numbering 1-15: correct
+- Summary cross-reference to "Section 12": correct
+- British English: maintained
+- Tech choices aligned: Jest/pytest/Playwright/GitHub Actions/ECR/ECS/CDK all match Section 2
+- Three-layer validation testing maps correctly to Section 2.4
+- ~~One minor observation: Vercel mentioned alongside AWS-native stack (line 564)~~ — resolved Turn 16
+- Status: Document complete. No issues remaining.
+
+### Turn 16 — Drop Vercel mention
+- Replaced "deploys to Vercel (or as a static export to S3 + CloudFront)" with "deploys as a static export to S3 + CloudFront" to keep the stack consistently AWS-native
+
 ### Turn 13 — Testing/CI/CD/Deployment prompt
 - Created copyable prompt for Claude plugin to add testing, CI/CD, and deployment strategy section
 - Covers: unit/integration/e2e testing, CI/CD pipeline, deployment strategy, V1 simplifications
