@@ -732,3 +732,34 @@ This design addresses the four criteria from the brief:
 **Simple enough not to over-engineer V1** — Section 13 documents eight deliberate scope cuts, each with a clear future upgrade path. Polling instead of WebSockets, single clause library, no bulk upload — these aren't shortcuts, they're scope decisions that keep V1 focused on proving the workflow works end-to-end.
 
 The result is a tightly scoped capability — four screens, one input (a contract), one output (structured findings) — built on a foundation designed to carry the next ten capabilities.
+
+---
+
+## Appendix A. Tools & Approach
+
+This document was produced within the 90-minute timebox using a collaborative AI-assisted workflow. The tools and approach are documented here for transparency and to demonstrate how modern AI tooling can accelerate design work without sacrificing rigour.
+
+### Tools Used
+
+**Claude Cowork (Desktop)**
+Primary working environment. Used for iterative document drafting, real-time editing, clarifying questions via structured prompts, and file management. The AskUserQuestion tool was used at key decision points (tech stack, scope, format) to ensure alignment before committing to a direction. A scratchpad (`docs/scratchpad.md`) tracked every conversation turn, decision, and change — providing a full audit trail of the design process.
+
+**Claude CLI with AgentOps Plugin (`/brainstorm` command)**
+Used for an independent review pass of the design document mid-session. The brainstorm command ran a structured critique covering gaps, inconsistencies, and areas to strengthen — acting as a second pair of eyes. This surfaced the need for an Observability section, identified diagram inconsistencies, and prompted the summary rewrite to explicitly map against the four assignment criteria.
+
+**Subagent Architecture**
+Verification tasks (cross-reference checking, section numbering, diagram-vs-prose consistency) were delegated to focused subagents, keeping the main conversation context clean and enabling parallel work.
+
+**Git (Version Control)**
+All changes tracked in Git from the first draft. Incremental commits at each major milestone — initial draft, tech stack addition, review fixes, new sections — providing a clear history of how the document evolved. The commit log serves as a secondary audit trail alongside the scratchpad.
+
+### Approach
+
+The design was built iteratively across four phases within the timebox:
+
+1. **Scaffold** — Clarify requirements (format, tone, diagrams), establish STAR framing, produce the initial 12-section draft covering all areas from the brief.
+2. **Deepen** — Add tech stack decisions via structured questions, introduce Docling and three-layer validation, add architecture diagram.
+3. **Review & Harden** — Independent brainstorm review, fix inconsistencies, add Observability and GDPR sections, verify all diagrams align with prose.
+4. **Extend & Polish** — Add Testing/CI/CD, Design Patterns, and Engineering Standards sections via targeted plugin prompts. Multiple review passes to verify cross-references and internal consistency.
+
+Each addition was followed by a verification step — no section was marked complete without a consistency check against the rest of the document.

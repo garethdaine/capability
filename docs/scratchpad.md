@@ -110,6 +110,22 @@ Design the first working version of a "Contract Clause Analysis" capability for 
 3. **GDPR/data residency** (Section 9): Added subsection on single-region deployment, data residency, and GDPR right-to-deletion with audit log redaction approach
 4. **Verification badges in UX** (Section 4, Screen 4): Added "Verified"/"Under Review" badge description with cross-reference to Section 2.4
 
+### Turn 20 — Tools & Approach section, final review, README
+- Added Appendix A (Tools & Approach) to design doc — describes Claude Cowork, Claude CLI with AgentOps `/brainstorm`, subagent architecture, Git workflow, and the 4-phase iterative approach
+- Placed as appendix after Section 16 Summary (meta-information, not part of the technical design)
+- Final review: 16 sections + 1 appendix, 765 lines, all cross-references verified, British English consistent
+- Created `README.md` in repo root with: overview, document structure table, tech stack summary, repo contents, design process, full git log
+- Status: Complete. Ready for final commit and submission.
+
+### Turn 19 — Re-review after Design Patterns section added
+- Verified new Section 10 (Design Patterns & Engineering Standards): 3 subsections, 6 architecture patterns, code conventions, engineering standards — all well-integrated
+- Section numbering 1-16: correct, sequential, no gaps
+- All cross-references verified (12 checked): Section 2.4, 4, 5, 5.3, 6, 8, 9, 11, 13, 14, 15 — all point to correct sections
+- British English: consistent
+- Feature flag pattern (Section 10.3) correctly ties back to capability registration (Section 14)
+- Monorepo structure in 10.2 aligns with deployment strategy in Section 12.3
+- **Status: Document complete. 16 sections. No issues.**
+
 ### Turn 18 — Design Patterns & Engineering Standards prompt
 - Gareth requested new section covering design patterns and engineering standards
 - Decisions: full engineering standards scope (architecture patterns + code conventions + standards), placed before Implementation Plan (Section 10)
