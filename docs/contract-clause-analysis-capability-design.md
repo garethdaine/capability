@@ -471,7 +471,89 @@ All infrastructure runs in a single AWS region, selected per deployment to meet 
 
 ---
 
-## 10. Implementation Plan
+## 10. Design Patterns & Engineering Standards
+
+This section makes explicit the patterns and conventions underpinning the design. The goal is "just enough" structure for a small team shipping V1 — not an enterprise governance framework.
+
+### 10.1 Architecture Patterns
+
+**Adapter pattern** — Both the Contract Analysis API and Anthropic Claude API sit behind typed adapter interfaces. Business logic calls the adapter; the adapter handles HTTP details, authentication, and response mapping. If the analysis provider changes, only the adapter is rewritten — no business logic touched. This is the primary mitigation for vendor lock-in (see Section 15).
+
+**Repository pattern** — Data access is abstracted behind repository classes for each aggregate: `CapabilityRunRepository`, `FindingRepository`, `AuditLogRepository`. Queries and mutations go through the repository, not raw SQL in service code. This keeps database concerns out of business logic and makes integration testing straightforward — the repository is the seam.
+
+**State machine** — The capability run lifecycle (`created → processing → completed | failed`) is modelled as an explicit state machine with defined transitions and guards. Invalid transitions (e.g., `completed → processing`) are rejected. This prevents impossible states and makes the run lifecycle predictable across retry and failure scenarios.
+
+**Validation pipeline** — The three-layer validation (Section 2.4) is implemented as a composable chain: each layer receives the result, runs its checks, and passes the annotated result to the next layer. Layers can be added, removed, or reordered without modifying each other. In V1, the chain is: schema validation → confidence scoring → LLM cross-check (async).
+
+**Circuit breaker** — The external API circuit breaker (Section 8) uses a simple state machine: `closed → open → half-open`. After 5 consecutive failures, the breaker opens and new requests are queued rather than sent. After a cooldown period, one probe request tests recovery. Implemented via a lightweight library (e.g., `opossum` for Node.js) rather than hand-rolled.
+
+**Event-driven audit logging** — Audit log writes are published as events to an internal queue rather than written inline during request processing. This decouples audit logging from the critical path — a slow audit write never blocks a user-facing response. Events are consumed by a dedicated audit writer that batch-inserts to the `AUDIT_LOG` table.
+
+### 10.2 Code Conventions
+
+**Project structure** — Monorepo with three top-level packages:
+
+```
+/packages
+  /portal-backend    — Fastify API (TypeScript)
+  /portal-frontend   — Next.js app (TypeScript)
+  /docling-service   — FastAPI microservice (Python)
+/infrastructure      — AWS CDK stacks (TypeScript)
+```
+
+Shared TypeScript types (API contracts, DTOs) live in a `shared` package imported by both frontend and backend — single source of truth for request/response shapes.
+
+**Naming conventions:**
+- **Files**: kebab-case (`capability-run.service.ts`, `finding.repository.ts`)
+- **Database**: snake_case for tables and columns (`capability_run`, `created_at`)
+- **API endpoints**: kebab-case paths (`/capabilities/contract-analysis/run`)
+- **TypeScript**: PascalCase for interfaces and types (`CapabilityRun`, `FindingCategory`), camelCase for variables and functions
+
+**Error handling** — All services use typed error classes with a consistent shape: `code` (machine-readable, e.g., `FILE_TOO_LARGE`), `message` (human-readable), `statusCode` (HTTP status), and optional `context` (debugging metadata, never exposed to the client). Errors propagate up the call stack and are caught by a centralised error handler in Fastify that maps them to the API response envelope.
+
+**Logging format** — JSON structured logs with mandatory fields on every entry:
+
+| Field | Purpose |
+|-------|---------|
+| `correlation_id` | Traces a request end-to-end (maps to `capability_run_id` where applicable) |
+| `service` | Which service emitted the log (`portal-backend`, `docling-service`) |
+| `action` | What happened (`file_uploaded`, `api_call_sent`, `validation_failed`) |
+| `timestamp` | ISO 8601, UTC |
+| `level` | `debug`, `info`, `warn`, `error` |
+
+This aligns with the observability strategy in Section 9.
+
+**API response envelope** — All portal API endpoints return a consistent shape:
+
+Success: `{ "data": { ... }, "meta": { "request_id": "...", "timestamp": "..." } }`
+
+Error: `{ "error": { "code": "FILE_TOO_LARGE", "message": "..." }, "meta": { "request_id": "...", "timestamp": "..." } }`
+
+The `meta.request_id` is the correlation ID used across logging and tracing.
+
+### 10.3 Engineering Standards
+
+**API versioning** — The portal's own API uses URL path versioning (`/api/v1/capabilities/...`). Simple, explicit, and easy to route. External API versions (Contract Analysis API, Claude API) are pinned in configuration and validated on every response (see Section 5.3, clause library version check). Version bumps are a deliberate, tested change — never automatic.
+
+**Code review expectations** — Every PR requires:
+- A description explaining *what* and *why* (not just *what*)
+- All CI checks passing (lint, unit tests, integration tests)
+- At least one reviewer approval
+- Migration notes if the PR includes database changes
+- No secrets, credentials, or environment-specific values in the diff
+
+**Dependency management** — All dependencies are locked (`package-lock.json`, `poetry.lock`). Renovate (or Dependabot) runs weekly with auto-merge for patch updates and manual review for minor/major bumps. `npm audit` and `pip audit` run in CI — builds fail on known critical vulnerabilities.
+
+**Documentation standards** — What must be documented:
+- **API contracts**: OpenAPI spec for the portal backend, generated from route definitions and kept in version control. The external API contract is documented in Section 5.
+- **Data model changes**: Every migration includes a brief comment explaining the change and why.
+- **Architectural decisions**: Lightweight ADRs (decision, context, rationale, consequences) for significant choices. Stored in `/docs/decisions/`. The decisions already captured in this document (Section 6 design decisions, Section 2.4 accuracy rationale) set the template.
+
+**Feature flags** — V1 uses a simple database-driven feature flag system. Flags are rows in a `feature_flag` table (`key`, `enabled`, `metadata`). The capability registration model (Section 14) already uses this pattern — a capability's `status` field is effectively a feature flag. For V1, this is checked at request time with a short TTL cache. No external feature flag service — that's a V2 consideration if flag complexity grows.
+
+---
+
+## 11. Implementation Plan
 
 ### Phase 1 — Foundation
 Set up the capability framework that all future capabilities will reuse.
@@ -512,9 +594,9 @@ Make it enterprise-ready.
 
 ---
 
-## 11. Testing, CI/CD & Deployment Strategy
+## 12. Testing, CI/CD & Deployment Strategy
 
-### 11.1 Testing Strategy
+### 12.1 Testing Strategy
 
 **Unit tests** — Jest for both the Next.js frontend and Fastify backend (single test runner across the TypeScript codebase). pytest for the Docling microservice. Focus unit tests on business logic: response validation rules, confidence scoring algorithm, finding transformation, and capability run state machine transitions. Target 80% coverage on core services; don't chase coverage on glue code or route definitions.
 
@@ -535,9 +617,9 @@ Make it enterprise-ready.
 - Layer 2 (confidence scoring): unit tests with curated findings at known confidence levels. Verify scoring factors are weighted correctly and that the right findings get flagged for Layer 3.
 - Layer 3 (LLM cross-check): integration test with a mocked Claude API response. Verify that flagged findings are sent, verification status updates correctly, and the async flow doesn't block result display.
 
-**What we skip in V1**: performance/load testing is manual (Section 10, Phase 4). No visual regression testing. No accessibility audit automation — these move to V2 once the core workflow is stable.
+**What we skip in V1**: performance/load testing is manual (Section 11, Phase 4). No visual regression testing. No accessibility audit automation — these move to V2 once the core workflow is stable.
 
-### 11.2 CI/CD Pipeline
+### 12.2 CI/CD Pipeline
 
 **Pipeline stages** (GitHub Actions):
 
@@ -557,7 +639,7 @@ lint → unit test → integration test → build → deploy
 
 **Container registry** — Amazon ECR, one repository per service (`portal-backend`, `docling-service`). Images tagged with git SHA for traceability and `latest` for convenience. Old images cleaned up by ECR lifecycle policy (retain last 20).
 
-### 11.3 Deployment Strategy
+### 12.3 Deployment Strategy
 
 **Infrastructure-as-code** — AWS CDK (TypeScript), matching the backend language. Defines ECS services, RDS instance, SQS queues, S3 buckets, Cognito user pool, and networking. All infrastructure changes go through the same PR and CI process as application code.
 
@@ -569,7 +651,7 @@ lint → unit test → integration test → build → deploy
 
 **Rollback** — ECS supports instant rollback to the previous task definition revision. If a deploy fails health checks, ECS automatically rolls back. For database migrations, backward-compatible migrations are the norm in V1 — additive only (new columns, new tables), never destructive, so rollback doesn't require a migration reversal.
 
-### 11.4 V1 Simplifications
+### 12.4 V1 Simplifications
 
 | Area | V1 Approach | Future Enhancement |
 |------|-------------|-------------------|
@@ -582,7 +664,7 @@ lint → unit test → integration test → build → deploy
 
 ---
 
-## 12. What We Deliberately Keep Simple in V1
+## 13. What We Deliberately Keep Simple in V1
 
 | Area | V1 Approach | Future Enhancement |
 |------|-------------|-------------------|
@@ -599,7 +681,7 @@ lint → unit test → integration test → build → deploy
 
 ---
 
-## 13. Extensibility — Building for Future Capabilities
+## 14. Extensibility — Building for Future Capabilities
 
 The design intentionally separates the **capability framework** (the reusable parts) from the **Contract Clause Analysis specifics**. Here's what's reusable from day one:
 
@@ -624,7 +706,7 @@ Adding a second capability (e.g., "Supplier Risk Assessment") would mean definin
 
 ---
 
-## 14. Key Technical Risks & Mitigations
+## 15. Key Technical Risks & Mitigations
 
 | Risk | Impact | Likelihood | Mitigation |
 |------|--------|------------|------------|
@@ -637,7 +719,7 @@ Adding a second capability (e.g., "Supplier Risk Assessment") would mean definin
 
 ---
 
-## 15. Summary
+## 16. Summary
 
 This design addresses the four criteria from the brief:
 
@@ -647,6 +729,6 @@ This design addresses the four criteria from the brief:
 
 **Extensible for future capabilities** — Roughly 60% of what we build is reusable: the capability lifecycle, file upload pipeline, job processing, audit logging, and result-to-initiative linking. Adding a second capability means defining a new API client, response schema, and results view — plugging into infrastructure that already exists.
 
-**Simple enough not to over-engineer V1** — Section 12 documents eight deliberate scope cuts, each with a clear future upgrade path. Polling instead of WebSockets, single clause library, no bulk upload — these aren't shortcuts, they're scope decisions that keep V1 focused on proving the workflow works end-to-end.
+**Simple enough not to over-engineer V1** — Section 13 documents eight deliberate scope cuts, each with a clear future upgrade path. Polling instead of WebSockets, single clause library, no bulk upload — these aren't shortcuts, they're scope decisions that keep V1 focused on proving the workflow works end-to-end.
 
 The result is a tightly scoped capability — four screens, one input (a contract), one output (structured findings) — built on a foundation designed to carry the next ten capabilities.

@@ -110,6 +110,26 @@ Design the first working version of a "Contract Clause Analysis" capability for 
 3. **GDPR/data residency** (Section 9): Added subsection on single-region deployment, data residency, and GDPR right-to-deletion with audit log redaction approach
 4. **Verification badges in UX** (Section 4, Screen 4): Added "Verified"/"Under Review" badge description with cross-reference to Section 2.4
 
+### Turn 18 — Design Patterns & Engineering Standards prompt
+- Gareth requested new section covering design patterns and engineering standards
+- Decisions: full engineering standards scope (architecture patterns + code conventions + standards), placed before Implementation Plan (Section 10)
+- Created copyable plugin prompt covering: adapter/repository/state machine/validation pipeline/circuit breaker/event-driven audit patterns, code conventions (project structure, naming, error handling, logging, API envelope), engineering standards (API versioning, code review, dependency management, documentation, feature flags)
+- Saved to `docs/design-patterns-prompt.md`
+- Plugin will insert as Section 10, renumber 10→11 through 15→16, fix all cross-references
+
+### Turn 17 — Final re-review after Gareth's 4 amendments
+- Confirmed all 4 fixes applied correctly:
+  1. Sequence diagram: API_REQUEST now created before external API call (line 388-389)
+  2. Capability registration: database-seeded with slug routing added to Section 13 (line 621)
+  3. GDPR/data residency: subsection added to Section 9 (lines 469-470)
+  4. Verification badges: Screen 4 description updated with cross-ref to Section 2.4 (line 152)
+- Section numbering 1-15: correct
+- All cross-references verified: Section 2.4, 4, 6, 10, 12 — all correct
+- Summary (Section 15) references Section 12: correct
+- British English: consistent throughout
+- Vercel mention: removed (S3 + CloudFront only, line 564)
+- **Status: Document complete. No issues. Ready to submit.**
+
 ### Turn 15 — Re-review after Testing/CI/CD/Deployment added
 - Full re-read of document (653 lines, 15 sections)
 - New Section 11 verified: testing strategy, CI/CD pipeline, deployment, V1 simplifications — all consistent with tech stack
@@ -123,6 +143,15 @@ Design the first working version of a "Contract Clause Analysis" capability for 
 
 ### Turn 16 — Drop Vercel mention
 - Replaced "deploys to Vercel (or as a static export to S3 + CloudFront)" with "deploys as a static export to S3 + CloudFront" to keep the stack consistently AWS-native
+
+### Turn 18 — Design Patterns & Engineering Standards section added
+- Added new Section 10 with three subsections:
+  - **10.1 Architecture Patterns**: Adapter (API wrappers), Repository (data access), State machine (run lifecycle), Validation pipeline (composable three-layer chain), Circuit breaker (opossum), Event-driven audit logging (queue-based)
+  - **10.2 Code Conventions**: Monorepo structure (3 packages + infra), naming conventions (kebab-case files, snake_case DB, PascalCase types), typed error classes with error codes, JSON structured logging format (5 mandatory fields), API response envelope (success/error shapes)
+  - **10.3 Engineering Standards**: URL path API versioning, PR/code review expectations, dependency management (Renovate, lockfiles, audit in CI), documentation standards (OpenAPI, migration comments, lightweight ADRs), database-driven feature flags tied to capability registration
+- Renumbered sections 10-15 → 11-16, subsections 11.x → 12.x
+- Fixed cross-references: "Section 10, Phase 4" → "Section 11, Phase 4", "Section 12" → "Section 13" in Summary, "Section 13" → "Section 14" for extensibility, "Section 14" → "Section 15" for risks
+- Document now has 16 sections
 
 ### Turn 13 — Testing/CI/CD/Deployment prompt
 - Created copyable prompt for Claude plugin to add testing, CI/CD, and deployment strategy section
