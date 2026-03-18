@@ -75,3 +75,11 @@ Design the first working version of a "Contract Clause Analysis" capability for 
 - Added architecture diagram (Mermaid flowchart) showing all services and connections
 - Renumbered all sections (2→3 through 12→13) and fixed internal cross-references
 - Document now has 13 sections
+
+### Turn 6
+- Committed tech stack changes as `a6cc355` — push failed (SSH), Gareth pushed locally
+
+### Turn 7
+- Created `docs/brainstorm-prompt.md` for AgentOps brainstorming command
+- Prompt covers: what's been done, task context, tech stack, all 13 sections
+- Includes IMPORTANT notes: only update the design doc, this is architecture not implementation, must update scratchpad every turn
