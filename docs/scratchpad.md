@@ -92,3 +92,10 @@ Design the first working version of a "Contract Clause Analysis" capability for 
 - **Implementation plan updated**: Added LLM cross-check service (Phase 2), observability setup (Phase 4), updated data model task
 - Sections renumbered 10-13 → 11-14
 - Document now has 14 sections
+
+### Turn 9 — Review feedback fixes (5 issues)
+- **CRITICAL fix 1**: Reordered Section 3 workflow diagram — validation/scoring now happens after API response, not before. Added ClamAV scan step with infected-file branch to error state.
+- **CRITICAL fix 2**: Added ClamAV virus scan step to Section 7 sequence diagram after file upload, with audit log entry and 422 rejection on detection.
+- **MODERATE fix 1**: Committed to AWS SQS (removed "or BullMQ (Redis)" ambiguity) in Section 2.1 tech stack table.
+- **MODERATE fix 2**: Aligned endpoint spelling — `POST /analyse` → `POST /analyze` (American English, matching capability name).
+- **MINOR fix**: `organisational` → `organizational` in API response example (line 205).

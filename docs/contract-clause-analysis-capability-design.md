@@ -28,7 +28,7 @@ The external Contract Analysis API does the heavy lifting — our job is to buil
 | **File Storage** | AWS S3 + KMS | Server-side encryption at rest, signed URLs for secure access, lifecycle policies for retention |
 | **Secrets Management** | AWS Secrets Manager | API keys, external service credentials, rotation support |
 | **Virus Scanning** | ClamAV (containerised) | Open-source, runs in-pipeline before files reach storage or analysis API |
-| **Job Queue** | AWS SQS or BullMQ (Redis) | Async processing with retry semantics, dead-letter queues for failed jobs |
+| **Job Queue** | AWS SQS | Managed async processing with retry semantics, dead-letter queues for failed jobs, no additional infrastructure to operate |
 | **Database** | PostgreSQL (AWS RDS) | JSONB support for flexible payloads, strong relational model for audit trail, mature and enterprise-proven |
 | **Infrastructure** | AWS (ECS Fargate or EKS) | Container orchestration for the Node.js backend and Docling microservice |
 
@@ -112,11 +112,12 @@ flowchart TD
     C -->|Invalid| D[Show error + guidance]
     D --> B
     C -->|Valid| E[Confirm & Submit]
-    E --> E1[Parse Document — Docling]
-    E1 --> E2[Schema Validate + Confidence Score]
-    E2 --> F[Send Parsed Content to Contract Analysis API]
+    E --> E0[Virus Scan — ClamAV]
+    E0 -->|Clean| E1[Parse Document — Docling]
+    E0 -->|Infected| D
+    E1 --> F[Send Parsed Content to Contract Analysis API]
     F --> G{API Response}
-    G -->|Success| H[Validate & Normalise Response]
+    G -->|Success| H[Validate Response — Schema + Confidence Score]
     G -->|Timeout / Error| I[Queue for Retry]
     I -->|Max retries exceeded| J[Mark as Failed + Notify User]
     I -->|Retry succeeds| H
@@ -202,7 +203,7 @@ Structured display of the analysis findings, grouped into three categories: miss
       "severity": "medium",
       "explanation": "The liability cap is set at 10x the annual contract value, which exceeds the typical range of 1-2x.",
       "reference_section": "Section 14.2",
-      "recommended_action": "Review and negotiate the liability cap to align with organisational risk policy."
+      "recommended_action": "Review and negotiate the liability cap to align with organizational risk policy."
     },
     {
       "finding_id": "f-003",
@@ -370,6 +371,11 @@ sequenceDiagram
     Portal->>Portal: Client-side validation (type, size)
     Portal->>API: POST /capabilities/contract-analysis/run
     API->>Store: Store file securely (encrypted at rest)
+    API->>API: Virus scan (ClamAV)
+    alt File infected
+        API->>DB: Write AUDIT_LOG (virus_detected)
+        API-->>Portal: 422 Rejected {reason: malicious_file}
+    end
     API->>DB: Create CAPABILITY_RUN + DOCUMENT_UPLOAD
     API->>DB: Write AUDIT_LOG (file_uploaded)
     API->>Queue: Enqueue analysis job
@@ -379,7 +385,7 @@ sequenceDiagram
     Queue->>API: Process job
     API->>Docling: POST /parse {signed_url}
     Docling-->>API: Parsed content (text, tables, sections)
-    API->>ExtAPI: POST /analyse {parsed_content, clause_library}
+    API->>ExtAPI: POST /analyze {parsed_content, clause_library}
     API->>DB: Create API_REQUEST (status: sent)
 
     alt API responds successfully
