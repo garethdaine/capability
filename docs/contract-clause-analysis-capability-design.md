@@ -14,7 +14,94 @@ The external Contract Analysis API does the heavy lifting — our job is to buil
 
 ---
 
-## 2. Overall Workflow
+## 2. V1 Tech Stack
+
+### 2.1 Overview
+
+| Layer | Technology | Rationale |
+|-------|-----------|-----------|
+| **Frontend** | Next.js + React (TypeScript) | SSR for initial load performance, strong enterprise adoption, shared language with backend |
+| **Backend / API** | Node.js + Fastify (TypeScript) | Fast async I/O for API orchestration, TypeScript end-to-end, lightweight and performant |
+| **Document Parsing** | Docling (Python microservice) | IBM open-source parser with strong layout understanding, table extraction, and multi-format support (PDF, DOCX) |
+| **Analysis Accuracy** | Schema validation + confidence scoring + LLM cross-check (Anthropic Claude API) | Three-layer validation: structural checks, confidence scoring on findings, and LLM second opinion on flagged items |
+| **Auth** | AWS Cognito | Managed identity for enterprise SSO, JWT-based session management |
+| **File Storage** | AWS S3 + KMS | Server-side encryption at rest, signed URLs for secure access, lifecycle policies for retention |
+| **Secrets Management** | AWS Secrets Manager | API keys, external service credentials, rotation support |
+| **Virus Scanning** | ClamAV (containerised) | Open-source, runs in-pipeline before files reach storage or analysis API |
+| **Job Queue** | AWS SQS or BullMQ (Redis) | Async processing with retry semantics, dead-letter queues for failed jobs |
+| **Database** | PostgreSQL (AWS RDS) | JSONB support for flexible payloads, strong relational model for audit trail, mature and enterprise-proven |
+| **Infrastructure** | AWS (ECS Fargate or EKS) | Container orchestration for the Node.js backend and Docling microservice |
+
+### 2.2 Architecture
+
+```mermaid
+flowchart LR
+    subgraph Client
+        A[Next.js Frontend]
+    end
+
+    subgraph Backend ["Backend Services (ECS/EKS)"]
+        B[Fastify API - Node.js/TS]
+        C[Docling Service - Python/FastAPI]
+        D[ClamAV Scanner]
+    end
+
+    subgraph AWS ["AWS Managed Services"]
+        E[Cognito - Auth]
+        F[S3 + KMS - File Storage]
+        G[SQS - Job Queue]
+        H[RDS PostgreSQL - Database]
+        I[Secrets Manager]
+    end
+
+    subgraph External
+        J[Contract Analysis API]
+        K[Anthropic Claude API]
+    end
+
+    A -->|Authenticated requests| B
+    B -->|Store uploads| F
+    B -->|Scan files| D
+    B -->|Parse documents| C
+    B -->|Enqueue jobs| G
+    G -->|Process jobs| B
+    B -->|Analyse contract| J
+    B -->|Cross-check findings| K
+    B -->|Read/write| H
+    B -->|Fetch secrets| I
+    A -->|Auth| E
+```
+
+### 2.3 Document Parsing — Docling Microservice
+
+Docling runs as a standalone FastAPI service, separate from the main backend. This keeps the Python dependency isolated and allows independent scaling.
+
+**Flow**: Upload lands in S3 → Backend calls Docling service with a signed URL → Docling extracts structured text, tables, and section headings → Returns parsed content → Backend sends parsed content to the Contract Analysis API.
+
+**Why Docling over raw file passthrough?** Pre-parsing gives us control over what the analysis API receives. We can normalise document structure, strip irrelevant content (headers, footers, page numbers), and ensure consistent input quality regardless of the original file format. It also means we're not locked into whatever parsing the external API does internally.
+
+### 2.4 Analysis Accuracy — Three-Layer Validation
+
+The brief states the external API performs the analysis. Our job is to ensure what reaches the user is trustworthy. Three layers handle this:
+
+**Layer 1 — Schema Validation**
+Structural check. Does the response match our expected JSON schema? Are required fields present? Are enum values valid? This catches malformed responses and API version drift. Fast, deterministic, zero cost.
+
+**Layer 2 — Confidence Scoring**
+Each finding from the API is scored based on completeness and specificity. A finding with a specific section reference, a clear explanation, and a concrete recommended action scores higher than a vague or incomplete finding. Low-confidence findings are flagged for Layer 3.
+
+Scoring factors: presence of `reference_section`, explanation length and specificity, whether `recommended_action` is actionable vs. generic, severity consistency with the finding category.
+
+**Layer 3 — LLM Cross-Check (Anthropic Claude API)**
+Findings flagged as low-confidence by Layer 2 are sent to Claude for a second opinion. The LLM receives the original contract text (from Docling) and the flagged finding, and is asked: does this finding appear accurate given the contract content?
+
+This catches false positives and misclassifications from the primary analysis API. In V1, this runs asynchronously — results display immediately with high-confidence findings, and cross-checked findings update once the LLM review completes. Users see a clear "Verified" or "Under Review" badge on each finding.
+
+**Cost control**: Only low-confidence findings hit the LLM. In typical usage, this is expected to be 10-20% of findings, keeping API costs manageable.
+
+---
+
+## 3. Overall Workflow
 
 The capability follows a five-stage pattern that will become the standard template for all future capabilities.
 
@@ -45,7 +132,7 @@ flowchart TD
 
 ---
 
-## 3. User Experience Flow
+## 4. User Experience Flow
 
 The user journey is deliberately simple — four screens max.
 
@@ -63,9 +150,9 @@ Structured display of the analysis findings, grouped into three categories: miss
 
 ---
 
-## 4. API Integration Design
+## 5. API Integration Design
 
-### 4.1 Request to Contract Analysis API
+### 5.1 Request to Contract Analysis API
 
 ```json
 {
@@ -82,7 +169,7 @@ Structured display of the analysis findings, grouped into three categories: miss
 }
 ```
 
-### 4.2 Expected API Response Structure
+### 5.2 Expected API Response Structure
 
 ```json
 {
@@ -128,7 +215,7 @@ Structured display of the analysis findings, grouped into three categories: miss
 }
 ```
 
-### 4.3 Response Validation Rules
+### 5.3 Response Validation Rules
 
 Before any result is shown to a user, the response must pass validation:
 
@@ -145,7 +232,7 @@ This validation layer is the contract between the API and our users. It ensures 
 
 ---
 
-## 5. Data Model
+## 6. Data Model
 
 ```mermaid
 erDiagram
@@ -259,7 +346,7 @@ erDiagram
 
 ---
 
-## 6. Processing Sequence
+## 7. Processing Sequence
 
 ```mermaid
 sequenceDiagram
@@ -309,7 +396,7 @@ sequenceDiagram
 
 ---
 
-## 7. Guardrails & Error Handling
+## 8. Guardrails & Error Handling
 
 ### File Upload Security
 - **V1 accepted types**: PDF, DOCX only. Strict MIME type checking (not just extension).
@@ -334,18 +421,18 @@ Every user action and system event writes to `AUDIT_LOG` with: who did it, what 
 
 ---
 
-## 8. Implementation Plan
+## 9. Implementation Plan
 
-### Phase 1 — Foundation (Week 1-2)
+### Phase 1 — Foundation
 Set up the capability framework that all future capabilities will reuse.
 
-- [ ] **Capability data model** — migrations for all tables in Section 5
+- [ ] **Capability data model** — migrations for all tables in Section 6
 - [ ] **File upload service** — secure upload, validation, storage, checksum
 - [ ] **Capability run lifecycle** — state machine (created → processing → completed/failed)
 - [ ] **Audit logging service** — generic, reusable across all capabilities
 - [ ] **Job queue setup** — for async API calls with retry logic
 
-### Phase 2 — Contract Analysis Integration (Week 2-3)
+### Phase 2 — Contract Analysis Integration
 Wire up the specific capability.
 
 - [ ] **API client** — typed client for the Contract Analysis API with timeout, retry, circuit breaker
@@ -353,15 +440,15 @@ Wire up the specific capability.
 - [ ] **Result processing** — transform validated response into `CAPABILITY_RESULT` + `FINDING` records
 - [ ] **Notification service** — notify frontend when processing completes (WebSocket or polling in V1)
 
-### Phase 3 — Frontend (Week 3-4)
-Build the four screens described in Section 3.
+### Phase 3 — Frontend
+Build the four screens described in Section 4.
 
 - [ ] **Capability landing page** — description + upload CTA
 - [ ] **Upload & confirm screen** — drag-drop, client-side validation, submit
 - [ ] **Processing screen** — status polling, estimated wait, navigate-away option
 - [ ] **Results screen** — findings grouped by category, severity badges, link-to-initiative action
 
-### Phase 4 — Hardening (Week 4)
+### Phase 4 — Hardening
 Make it enterprise-ready.
 
 - [ ] **Error state UX** — clear messaging for every failure mode
@@ -373,7 +460,7 @@ Make it enterprise-ready.
 
 ---
 
-## 9. What We Deliberately Keep Simple in V1
+## 10. What We Deliberately Keep Simple in V1
 
 | Area | V1 Approach | Future Enhancement |
 |------|-------------|-------------------|
@@ -390,7 +477,7 @@ Make it enterprise-ready.
 
 ---
 
-## 10. Extensibility — Building for Future Capabilities
+## 11. Extensibility — Building for Future Capabilities
 
 The design intentionally separates the **capability framework** (the reusable parts) from the **Contract Clause Analysis specifics**. Here's what's reusable from day one:
 
@@ -413,7 +500,7 @@ Adding a second capability (e.g., "Supplier Risk Assessment") would mean definin
 
 ---
 
-## 11. Key Technical Risks & Mitigations
+## 12. Key Technical Risks & Mitigations
 
 | Risk | Impact | Likelihood | Mitigation |
 |------|--------|------------|------------|
@@ -426,10 +513,10 @@ Adding a second capability (e.g., "Supplier Risk Assessment") would mean definin
 
 ---
 
-## 12. Summary
+## 13. Summary
 
-This design gives us a working Contract Clause Analysis capability that is reliable enough for enterprise use, auditable from end to end, and resilient to the external API having a bad day. It's scoped tightly — four screens, one input (a contract), one output (structured findings) — which means it can be delivered in roughly four weeks.
+This design gives us a working Contract Clause Analysis capability that is reliable enough for enterprise use, auditable from end to end, and resilient to the external API having a bad day. It's scoped tightly — four screens, one input (a contract), one output (structured findings).
 
-More importantly, roughly 60% of what we build is reusable. The second capability won't take four weeks. It'll take two, because the framework is already there.
+More importantly, roughly 60% of what we build is reusable. The second capability will take significantly less effort because the framework is already there.
 
 The deliberate V1 simplifications (single clause library, polling instead of push, no bulk upload) aren't shortcuts — they're scope decisions. Each one has a clear upgrade path for when user demand justifies the complexity.

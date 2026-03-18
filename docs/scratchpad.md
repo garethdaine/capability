@@ -13,6 +13,12 @@ Design the first working version of a "Contract Clause Analysis" capability for 
 - **Format**: Markdown (.md)
 - **Tone**: Balanced hybrid — product thinking backed by technical depth
 - **Diagrams**: Mermaid (workflow, data model, sequence)
+- **Frontend**: Next.js + React (TypeScript)
+- **Backend**: Node.js + Fastify (TypeScript)
+- **Parsing**: Docling (Python/FastAPI microservice)
+- **Security/Infra**: AWS-native (Cognito, S3+KMS, Secrets Manager)
+- **Analysis Accuracy**: Schema validation + confidence scoring + LLM cross-check (Anthropic Claude API)
+- **Database**: PostgreSQL (AWS RDS)
 
 ## Key Requirements from Brief
 1. Practical to deliver
@@ -40,3 +46,32 @@ Design the first working version of a "Contract Clause Analysis" capability for 
 - Built full deliverable: `contract-clause-analysis-capability-design.md`
 - Sections: Approach, Workflow (Mermaid flowchart), UX Flow (4 screens), API Integration (request/response/validation), Data Model (Mermaid ERD with 9 tables), Sequence Diagram, Guardrails, Implementation Plan (4 phases/4 weeks), V1 Simplifications table, Extensibility, Risks & Mitigations, Summary
 - Status: Draft complete, ready for Gareth's review
+
+### Turn 2
+- Gareth asked to commit initial pass (no push)
+- Attempted to init git in wrong folder (`/mnt/nocodesage/`) — Gareth already had a repo in `./capability`
+- Removed errant `.git` folder from working directory
+- Hit SSH auth issues, lock file issues — resolved
+
+### Turn 3
+- Committed initial draft as `ce3aaba` on `main` in `./capability`
+- Git config: name "Gareth Daine", email `1745959+garethdaine@users.noreply.github.com`
+- Gareth pushed from local terminal
+
+### Turn 4
+- Removed week/time estimates from implementation plan (Phase 1-4 headings) and summary
+- Kept phased structure intact, just stripped timeframes
+- Lesson: Gareth flagged we weren't updating scratchpad each turn — now caught up
+
+### Turn 5
+- Added V1 Tech Stack section (new Section 2) to design doc
+- Decisions made via AskUserQuestion:
+  - **Frontend**: Next.js + React (TypeScript)
+  - **Backend**: Node.js + Fastify (TypeScript)
+  - **Parsing**: Docling (Python/FastAPI microservice) — IBM open-source, strong layout/table extraction
+  - **Security**: AWS-native (Cognito, S3+KMS, Secrets Manager, WAF)
+  - **Accuracy**: Three-layer validation — schema check → confidence scoring → Anthropic Claude API cross-check on low-confidence findings
+  - **Docling integration**: Standalone Python microservice called via HTTP from the Node.js backend
+- Added architecture diagram (Mermaid flowchart) showing all services and connections
+- Renumbered all sections (2→3 through 12→13) and fixed internal cross-references
+- Document now has 13 sections
