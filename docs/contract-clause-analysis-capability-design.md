@@ -203,7 +203,7 @@ Structured display of the analysis findings, grouped into three categories: miss
       "severity": "medium",
       "explanation": "The liability cap is set at 10x the annual contract value, which exceeds the typical range of 1-2x.",
       "reference_section": "Section 14.2",
-      "recommended_action": "Review and negotiate the liability cap to align with organizational risk policy."
+      "recommended_action": "Review and negotiate the liability cap to align with organisational risk policy."
     },
     {
       "finding_id": "f-003",
@@ -385,7 +385,7 @@ sequenceDiagram
     Queue->>API: Process job
     API->>Docling: POST /parse {signed_url}
     Docling-->>API: Parsed content (text, tables, sections)
-    API->>ExtAPI: POST /analyze {parsed_content, clause_library}
+    API->>ExtAPI: POST /analyse {parsed_content, clause_library}
     API->>DB: Create API_REQUEST (status: sent)
 
     alt API responds successfully

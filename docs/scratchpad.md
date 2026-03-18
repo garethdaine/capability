@@ -99,3 +99,7 @@ Design the first working version of a "Contract Clause Analysis" capability for 
 - **MODERATE fix 1**: Committed to AWS SQS (removed "or BullMQ (Redis)" ambiguity) in Section 2.1 tech stack table.
 - **MODERATE fix 2**: Aligned endpoint spelling — `POST /analyse` → `POST /analyze` (American English, matching capability name).
 - **MINOR fix**: `organisational` → `organizational` in API response example (line 205).
+
+### Turn 10 — British English correction
+- Reverted American English changes from Turn 9: `organizational` → `organisational`, `/analyze` → `/analyse`
+- Document convention: British English throughout
