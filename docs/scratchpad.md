@@ -103,3 +103,21 @@ Design the first working version of a "Contract Clause Analysis" capability for 
 ### Turn 10 — British English correction
 - Reverted American English changes from Turn 9: `organizational` → `organisational`, `/analyze` → `/analyse`
 - Document convention: British English throughout
+
+### Turn 12 — Four targeted refinements
+1. **Sequence diagram ordering** (Section 7): Swapped lines — API_REQUEST now created before the external API call, ensuring trace exists even if the call crashes
+2. **Capability registration** (Section 12): Added paragraph explaining database-seeded registration with slug-based routing
+3. **GDPR/data residency** (Section 9): Added subsection on single-region deployment, data residency, and GDPR right-to-deletion with audit log redaction approach
+4. **Verification badges in UX** (Section 4, Screen 4): Added "Verified"/"Under Review" badge description with cross-reference to Section 2.4
+
+### Turn 11 — Final review before manual review
+- Re-read full document (578 lines, 14 sections)
+- **All 5 previous issues confirmed resolved**: workflow logic, ClamAV in sequence, SQS commitment, British English consistent
+- **AgentOps additions verified**: Section 9 (Observability), rewritten Summary (Section 14), updated sequence diagram with Docling + Claude participants, implementation plan updated
+- **Structural integrity**: 14 sections sequential, all cross-references correct, 3 Mermaid diagrams internally consistent, data model aligned with accuracy layer
+- **4 minor observations flagged for Gareth's manual review** (non-blocking):
+  1. Sequence diagram: API_REQUEST created after sending to API (should arguably be before)
+  2. Section 12 (Extensibility): no mention of how new capabilities get registered
+  3. No GDPR/data residency mention despite handling supplier contracts
+  4. "Verified"/"Under Review" badges described in Section 2.4 but not in Screen 4 UX description
+- Status: Document is interview-ready. Gareth doing manual review.

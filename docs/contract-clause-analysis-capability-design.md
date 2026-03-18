@@ -149,7 +149,7 @@ Drag-and-drop upload area. Client-side validation runs immediately (file type, s
 A status screen showing progress. If the API responds quickly (<10s), this may flash past. If it takes longer, show an estimated wait with the option to navigate away and be notified when complete. Critical: never leave users staring at a spinner with no information.
 
 **Screen 4 — Results**
-Structured display of the analysis findings, grouped into three categories: missing clauses, unusual clauses, and clauses requiring negotiation. Each finding shows the clause name, severity/risk level, a plain-language explanation, and the relevant contract section. A "Link to Initiative" button lets the user associate results with an existing procurement initiative.
+Structured display of the analysis findings, grouped into three categories: missing clauses, unusual clauses, and clauses requiring negotiation. Each finding shows the clause name, severity/risk level, a plain-language explanation, the relevant contract section, and a verification badge — "Verified" for high-confidence findings that passed all validation layers, or "Under Review" for findings still awaiting the LLM cross-check (see Section 2.4). A "Link to Initiative" button lets the user associate results with an existing procurement initiative.
 
 ---
 
@@ -385,8 +385,8 @@ sequenceDiagram
     Queue->>API: Process job
     API->>Docling: POST /parse {signed_url}
     Docling-->>API: Parsed content (text, tables, sections)
-    API->>ExtAPI: POST /analyse {parsed_content, clause_library}
     API->>DB: Create API_REQUEST (status: sent)
+    API->>ExtAPI: POST /analyse {parsed_content, clause_library}
 
     alt API responds successfully
         ExtAPI-->>API: 200 OK {findings}
@@ -466,6 +466,9 @@ Each service exposes a `/health` endpoint returning its status and dependency co
 - **Capability results and findings**: Retained indefinitely in the database (audit requirement). Results linked to initiatives inherit the initiative's retention policy.
 - **Audit logs**: Retained for a minimum of 7 years (standard enterprise compliance). Append-only, never deleted.
 
+### Data Residency & GDPR
+All infrastructure runs in a single AWS region, selected per deployment to meet client data residency requirements. Supplier contracts and analysis results never leave the chosen region. For GDPR right-to-deletion requests, contract files in S3 can be purged, but audit log entries are retained with personally identifiable fields redacted rather than deleted — balancing the right to erasure against the enterprise audit requirement.
+
 ---
 
 ## 10. Implementation Plan
@@ -544,6 +547,8 @@ The design intentionally separates the **capability framework** (the reusable pa
 - Response schema and validation rules
 - How to transform findings for display
 - What the results screen looks like
+
+**Capability registration**: New capabilities are database-seeded — a row in the `CAPABILITY` table with a name, slug, and status. The backend routes to the correct API client and validation rules based on the slug. No code deployment is needed to register a capability; the capability-specific logic (API client, schema, results view) is deployed as a module, and the capability becomes available once its database record is set to `active`.
 
 Adding a second capability (e.g., "Supplier Risk Assessment") would mean defining a new API client, a new response schema, a new results view, and plugging into the existing framework. The upload, processing, auditing, and linking infrastructure is already there.
 
