@@ -110,6 +110,22 @@ Design the first working version of a "Contract Clause Analysis" capability for 
 3. **GDPR/data residency** (Section 9): Added subsection on single-region deployment, data residency, and GDPR right-to-deletion with audit log redaction approach
 4. **Verification badges in UX** (Section 4, Screen 4): Added "Verified"/"Under Review" badge description with cross-reference to Section 2.4
 
+### Turn 13 — Testing/CI/CD/Deployment prompt
+- Created copyable prompt for Claude plugin to add testing, CI/CD, and deployment strategy section
+- Covers: unit/integration/e2e testing, CI/CD pipeline, deployment strategy, V1 simplifications
+- Instructs plugin to insert after Section 10, renumber subsequent sections, fix cross-references
+- British English, match existing doc tone
+
+### Turn 14 — Testing, CI/CD & Deployment section added
+- Added new Section 11 with four subsections:
+  - **11.1 Testing Strategy**: Unit (Jest/pytest), integration (real Postgres, mocked HTTP APIs, Docling contract tests), E2E (Playwright, 5 key flows), three-layer validation testing approach, V1 test scope cuts
+  - **11.2 CI/CD Pipeline**: GitHub Actions, 5 stages (lint→test→integration→build→deploy), trunk-based branching, migration handling, ECR container registry
+  - **11.3 Deployment Strategy**: AWS CDK (TypeScript), independent ECS service deployment, rolling updates for zero-downtime, Secrets Manager injection, rollback via ECS task definition revert
+  - **11.4 V1 Simplifications**: 6-row table of deferred testing/deployment enhancements
+- Renumbered sections 11-14 → 12-15
+- Fixed Summary cross-reference: "Section 11" → "Section 12"
+- Document now has 15 sections
+
 ### Turn 11 — Final review before manual review
 - Re-read full document (578 lines, 14 sections)
 - **All 5 previous issues confirmed resolved**: workflow logic, ClamAV in sequence, SQS commitment, British English consistent

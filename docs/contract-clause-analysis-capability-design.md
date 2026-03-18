@@ -512,7 +512,77 @@ Make it enterprise-ready.
 
 ---
 
-## 11. What We Deliberately Keep Simple in V1
+## 11. Testing, CI/CD & Deployment Strategy
+
+### 11.1 Testing Strategy
+
+**Unit tests** — Jest for both the Next.js frontend and Fastify backend (single test runner across the TypeScript codebase). pytest for the Docling microservice. Focus unit tests on business logic: response validation rules, confidence scoring algorithm, finding transformation, and capability run state machine transitions. Target 80% coverage on core services; don't chase coverage on glue code or route definitions.
+
+**Integration tests** — Test the boundaries where things actually break:
+- **API client**: Mock the external Contract Analysis API at the HTTP layer (e.g., `nock` or `msw`) to verify timeout handling, retry logic, circuit breaker behaviour, and response validation against known good/bad payloads.
+- **Database**: Run integration tests against a real PostgreSQL instance (Docker in CI). Test migrations, audit log writes, and the full capability run lifecycle from `created` through to `completed`/`failed`.
+- **Docling contract tests**: Verify the interface between the backend and Docling service stays consistent — the backend sends a signed URL, Docling returns structured content in the expected shape. These catch drift if either side changes independently.
+
+**End-to-end tests** — Playwright for browser-based flows. Cover the non-negotiable paths:
+1. Happy path: upload → processing → results displayed with correct categories and badges
+2. Invalid file: upload rejected with clear error message
+3. API timeout: processing screen shows appropriate wait state, retry completes, results appear
+4. Partial failure: some findings stripped, user sees warning banner
+5. Virus detected: upload rejected before processing begins
+
+**Testing the three-layer validation pipeline:**
+- Layer 1 (schema validation): unit tests with deliberately malformed payloads — missing fields, wrong types, invalid enums. Deterministic and fast.
+- Layer 2 (confidence scoring): unit tests with curated findings at known confidence levels. Verify scoring factors are weighted correctly and that the right findings get flagged for Layer 3.
+- Layer 3 (LLM cross-check): integration test with a mocked Claude API response. Verify that flagged findings are sent, verification status updates correctly, and the async flow doesn't block result display.
+
+**What we skip in V1**: performance/load testing is manual (Section 10, Phase 4). No visual regression testing. No accessibility audit automation — these move to V2 once the core workflow is stable.
+
+### 11.2 CI/CD Pipeline
+
+**Pipeline stages** (GitHub Actions):
+
+```
+lint → unit test → integration test → build → deploy
+```
+
+1. **Lint** — ESLint + Prettier (TypeScript), Ruff (Python/Docling). Fast, fails first.
+2. **Unit test** — Jest + pytest in parallel. Coverage report generated but not gated in V1 (tracked, not enforced).
+3. **Integration test** — Spins up PostgreSQL via Docker service container. Runs database and API client integration tests.
+4. **Build** — Builds Docker images for the Fastify backend and Docling microservice. Tags with git SHA + `latest`.
+5. **Deploy** — Pushes images to Amazon ECR. Triggers ECS service update (staging on merge to `main`, production on manual approval).
+
+**Branch strategy** — Trunk-based for V1. Feature branches merge to `main` via pull request with required CI pass. No long-lived branches. Release tagging for production deploys.
+
+**Database migrations** — Run as a pre-deploy step in the CI pipeline using a migration tool (e.g., `node-pg-migrate` or Prisma Migrate). Migrations execute against the target environment's database before the new containers roll out. Destructive migrations (column drops, table deletes) require manual approval in the pipeline.
+
+**Container registry** — Amazon ECR, one repository per service (`portal-backend`, `docling-service`). Images tagged with git SHA for traceability and `latest` for convenience. Old images cleaned up by ECR lifecycle policy (retain last 20).
+
+### 11.3 Deployment Strategy
+
+**Infrastructure-as-code** — AWS CDK (TypeScript), matching the backend language. Defines ECS services, RDS instance, SQS queues, S3 buckets, Cognito user pool, and networking. All infrastructure changes go through the same PR and CI process as application code.
+
+**Service deployment** — The Fastify backend and Docling microservice deploy independently as separate ECS services. Each has its own task definition, scaling policy, and health check. Independent deployments mean a Docling update doesn't require a backend redeploy, and vice versa. The Next.js frontend deploys to Vercel (or as a static export to S3 + CloudFront) — separate from the backend release cycle.
+
+**Zero-downtime deploys** — ECS rolling update strategy. New task instances register with the load balancer, pass health checks, then old instances drain and stop. Minimum healthy percentage set to 100% so capacity never drops during deploys.
+
+**Environment configuration** — Environment variables injected via ECS task definitions. Secrets (API keys, database credentials) pulled from AWS Secrets Manager at container start — never baked into images. Each environment (dev, staging, production) has its own Secrets Manager namespace.
+
+**Rollback** — ECS supports instant rollback to the previous task definition revision. If a deploy fails health checks, ECS automatically rolls back. For database migrations, backward-compatible migrations are the norm in V1 — additive only (new columns, new tables), never destructive, so rollback doesn't require a migration reversal.
+
+### 11.4 V1 Simplifications
+
+| Area | V1 Approach | Future Enhancement |
+|------|-------------|-------------------|
+| **Load testing** | Manual via Phase 4 hardening | Automated load tests in CI (k6 or Artillery) |
+| **Visual regression** | Manual visual QA | Percy or Chromatic snapshot testing |
+| **Accessibility** | Manual audit | axe-core in CI, Lighthouse accessibility gate |
+| **Canary deploys** | Rolling update only | Canary + automated rollback on error spike |
+| **Multi-region** | Single region | Active-passive failover or multi-region active |
+| **Pipeline environments** | Dev → staging → production | Add preview environments per PR |
+
+---
+
+## 12. What We Deliberately Keep Simple in V1
 
 | Area | V1 Approach | Future Enhancement |
 |------|-------------|-------------------|
@@ -529,7 +599,7 @@ Make it enterprise-ready.
 
 ---
 
-## 12. Extensibility — Building for Future Capabilities
+## 13. Extensibility — Building for Future Capabilities
 
 The design intentionally separates the **capability framework** (the reusable parts) from the **Contract Clause Analysis specifics**. Here's what's reusable from day one:
 
@@ -554,7 +624,7 @@ Adding a second capability (e.g., "Supplier Risk Assessment") would mean definin
 
 ---
 
-## 13. Key Technical Risks & Mitigations
+## 14. Key Technical Risks & Mitigations
 
 | Risk | Impact | Likelihood | Mitigation |
 |------|--------|------------|------------|
@@ -567,7 +637,7 @@ Adding a second capability (e.g., "Supplier Risk Assessment") would mean definin
 
 ---
 
-## 14. Summary
+## 15. Summary
 
 This design addresses the four criteria from the brief:
 
@@ -577,6 +647,6 @@ This design addresses the four criteria from the brief:
 
 **Extensible for future capabilities** — Roughly 60% of what we build is reusable: the capability lifecycle, file upload pipeline, job processing, audit logging, and result-to-initiative linking. Adding a second capability means defining a new API client, response schema, and results view — plugging into infrastructure that already exists.
 
-**Simple enough not to over-engineer V1** — Section 11 documents eight deliberate scope cuts, each with a clear future upgrade path. Polling instead of WebSockets, single clause library, no bulk upload — these aren't shortcuts, they're scope decisions that keep V1 focused on proving the workflow works end-to-end.
+**Simple enough not to over-engineer V1** — Section 12 documents eight deliberate scope cuts, each with a clear future upgrade path. Polling instead of WebSockets, single clause library, no bulk upload — these aren't shortcuts, they're scope decisions that keep V1 focused on proving the workflow works end-to-end.
 
 The result is a tightly scoped capability — four screens, one input (a contract), one output (structured findings) — built on a foundation designed to carry the next ten capabilities.
