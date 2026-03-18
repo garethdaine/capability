@@ -112,7 +112,9 @@ flowchart TD
     C -->|Invalid| D[Show error + guidance]
     D --> B
     C -->|Valid| E[Confirm & Submit]
-    E --> F[Send to Contract Analysis API]
+    E --> E1[Parse Document — Docling]
+    E1 --> E2[Schema Validate + Confidence Score]
+    E2 --> F[Send Parsed Content to Contract Analysis API]
     F --> G{API Response}
     G -->|Success| H[Validate & Normalise Response]
     G -->|Timeout / Error| I[Queue for Retry]
@@ -157,7 +159,7 @@ Structured display of the analysis findings, grouped into three categories: miss
 ```json
 {
   "request_id": "uuid-v4",
-  "file": "<base64-encoded-document or presigned-url>",
+  "parsed_content": "<structured text extracted by Docling>",
   "file_metadata": {
     "filename": "supplier-contract-2026.pdf",
     "mime_type": "application/pdf",
@@ -299,6 +301,8 @@ erDiagram
         text explanation
         string reference_section
         text recommended_action
+        decimal confidence_score
+        string verification_status
     }
 
     INITIATIVE {
@@ -342,6 +346,8 @@ erDiagram
 
 **Why `FINDING` as its own table instead of JSONB?** Findings are the primary unit of value for users. Making them first-class entities means we can query across results (e.g., "show me all contracts missing a DPA clause"), build dashboards, and let users annotate individual findings in future versions.
 
+**Why `confidence_score` and `verification_status` on `FINDING`?** These columns support the three-layer validation described in Section 2.4. Each finding gets a confidence score from Layer 2, and a verification status (`verified`, `under_review`, `flagged`) updated by the Layer 3 LLM cross-check. This lets the frontend show "Verified" or "Under Review" badges per finding.
+
 **Why `AUDIT_LOG`?** Enterprise procurement requires auditability. Every significant action — upload, submission, result viewed, result linked — gets logged with context. This is non-negotiable for enterprise, and cheap to implement from the start.
 
 ---
@@ -354,7 +360,9 @@ sequenceDiagram
     participant Portal as Portal Frontend
     participant API as Portal Backend
     participant Store as File Storage
+    participant Docling as Docling Service
     participant ExtAPI as Contract Analysis API
+    participant Claude as Anthropic Claude API
     participant DB as Database
     participant Queue as Job Queue
 
@@ -369,15 +377,21 @@ sequenceDiagram
     Portal-->>User: Show processing screen
 
     Queue->>API: Process job
-    API->>ExtAPI: POST /analyse {file, clause_library}
+    API->>Docling: POST /parse {signed_url}
+    Docling-->>API: Parsed content (text, tables, sections)
+    API->>ExtAPI: POST /analyse {parsed_content, clause_library}
     API->>DB: Create API_REQUEST (status: sent)
 
     alt API responds successfully
         ExtAPI-->>API: 200 OK {findings}
         API->>DB: Update API_REQUEST (status: success)
-        API->>API: Validate response schema
-        API->>API: Validate business rules
-        API->>DB: Create CAPABILITY_RESULT + FINDINGS
+        API->>API: Layer 1 — Schema validation
+        API->>API: Layer 2 — Confidence scoring per finding
+        API->>DB: Create CAPABILITY_RESULT + FINDINGS (with confidence_score)
+        Note over API,Claude: Low-confidence findings sent async
+        API->>Claude: Cross-check flagged findings
+        Claude-->>API: Verification result
+        API->>DB: Update FINDING verification_status
         API->>DB: Write AUDIT_LOG (analysis_completed)
         API-->>Portal: Notify (WebSocket or poll)
         Portal-->>User: Display results
@@ -421,12 +435,39 @@ Every user action and system event writes to `AUDIT_LOG` with: who did it, what 
 
 ---
 
-## 9. Implementation Plan
+## 9. Observability & Monitoring
+
+Enterprise systems need to be observable from day one. V1 includes structured logging, key metrics, and alerting on the critical path.
+
+### Structured Logging
+All services emit JSON-structured logs with correlation IDs (`capability_run_id`) that trace a request end-to-end — from upload through Docling parsing, API call, validation, and result storage. This makes debugging production issues straightforward: filter by `run_id` and see the full story.
+
+### Key Metrics (CloudWatch / Prometheus)
+| Metric | Purpose | Alert Threshold |
+|--------|---------|----------------|
+| `capability_run.duration_ms` | End-to-end processing time | P95 > 120s |
+| `external_api.latency_ms` | Contract Analysis API response time | P95 > 45s |
+| `external_api.error_rate` | API failure rate (triggers circuit breaker awareness) | > 10% over 5 min |
+| `docling.parse_duration_ms` | Document parsing time | P95 > 30s |
+| `finding.low_confidence_rate` | % findings sent to LLM cross-check | > 40% (may indicate API quality issue) |
+| `upload.virus_detected_count` | Malicious file attempts | Any occurrence |
+
+### Health Checks
+Each service exposes a `/health` endpoint returning its status and dependency connectivity. The load balancer routes traffic only to healthy instances. A degraded state (e.g., external API unreachable) is surfaced in the portal admin panel.
+
+### Data Retention
+- **Contract files in S3**: 90-day retention by default, configurable per client. After retention period, files are moved to Glacier or deleted per policy.
+- **Capability results and findings**: Retained indefinitely in the database (audit requirement). Results linked to initiatives inherit the initiative's retention policy.
+- **Audit logs**: Retained for a minimum of 7 years (standard enterprise compliance). Append-only, never deleted.
+
+---
+
+## 10. Implementation Plan
 
 ### Phase 1 — Foundation
 Set up the capability framework that all future capabilities will reuse.
 
-- [ ] **Capability data model** — migrations for all tables in Section 6
+- [ ] **Capability data model** — migrations for all tables in Section 6, including `confidence_score` and `verification_status` on FINDING
 - [ ] **File upload service** — secure upload, validation, storage, checksum
 - [ ] **Capability run lifecycle** — state machine (created → processing → completed/failed)
 - [ ] **Audit logging service** — generic, reusable across all capabilities
@@ -438,6 +479,7 @@ Wire up the specific capability.
 - [ ] **API client** — typed client for the Contract Analysis API with timeout, retry, circuit breaker
 - [ ] **Response validation** — JSON Schema validation + business rule checks
 - [ ] **Result processing** — transform validated response into `CAPABILITY_RESULT` + `FINDING` records
+- [ ] **LLM cross-check service** — async Claude API calls for low-confidence findings, update verification status
 - [ ] **Notification service** — notify frontend when processing completes (WebSocket or polling in V1)
 
 ### Phase 3 — Frontend
@@ -456,11 +498,12 @@ Make it enterprise-ready.
 - [ ] **End-to-end testing** — happy path, timeout, partial failure, invalid file
 - [ ] **Audit log review** — verify all required events are captured
 - [ ] **Load testing** — verify behaviour under concurrent uploads
+- [ ] **Observability setup** — structured logging with correlation IDs, key metrics, health checks, alerting
 - [ ] **Security review** — file handling, API key management, access controls
 
 ---
 
-## 10. What We Deliberately Keep Simple in V1
+## 11. What We Deliberately Keep Simple in V1
 
 | Area | V1 Approach | Future Enhancement |
 |------|-------------|-------------------|
@@ -477,7 +520,7 @@ Make it enterprise-ready.
 
 ---
 
-## 11. Extensibility — Building for Future Capabilities
+## 12. Extensibility — Building for Future Capabilities
 
 The design intentionally separates the **capability framework** (the reusable parts) from the **Contract Clause Analysis specifics**. Here's what's reusable from day one:
 
@@ -500,7 +543,7 @@ Adding a second capability (e.g., "Supplier Risk Assessment") would mean definin
 
 ---
 
-## 12. Key Technical Risks & Mitigations
+## 13. Key Technical Risks & Mitigations
 
 | Risk | Impact | Likelihood | Mitigation |
 |------|--------|------------|------------|
@@ -513,10 +556,16 @@ Adding a second capability (e.g., "Supplier Risk Assessment") would mean definin
 
 ---
 
-## 13. Summary
+## 14. Summary
 
-This design gives us a working Contract Clause Analysis capability that is reliable enough for enterprise use, auditable from end to end, and resilient to the external API having a bad day. It's scoped tightly — four screens, one input (a contract), one output (structured findings).
+This design addresses the four criteria from the brief:
 
-More importantly, roughly 60% of what we build is reusable. The second capability will take significantly less effort because the framework is already there.
+**Practical to deliver** — The implementation plan breaks the work into four focused phases. Phase 1 builds the reusable framework, Phase 2 wires up the specific capability, Phase 3 builds the UI, and Phase 4 hardens for production. Each phase produces a working increment.
 
-The deliberate V1 simplifications (single clause library, polling instead of push, no bulk upload) aren't shortcuts — they're scope decisions. Each one has a clear upgrade path for when user demand justifies the complexity.
+**Reliable for enterprise use** — Three-layer result validation (schema, confidence, LLM cross-check) ensures users never see garbage data. Async processing with retries and circuit breakers handles API instability. Structured observability with alerting means issues are caught before users notice them.
+
+**Extensible for future capabilities** — Roughly 60% of what we build is reusable: the capability lifecycle, file upload pipeline, job processing, audit logging, and result-to-initiative linking. Adding a second capability means defining a new API client, response schema, and results view — plugging into infrastructure that already exists.
+
+**Simple enough not to over-engineer V1** — Section 11 documents eight deliberate scope cuts, each with a clear future upgrade path. Polling instead of WebSockets, single clause library, no bulk upload — these aren't shortcuts, they're scope decisions that keep V1 focused on proving the workflow works end-to-end.
+
+The result is a tightly scoped capability — four screens, one input (a contract), one output (structured findings) — built on a foundation designed to carry the next ten capabilities.

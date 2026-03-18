@@ -83,3 +83,12 @@ Design the first working version of a "Contract Clause Analysis" capability for 
 - Created `docs/brainstorm-prompt.md` for AgentOps brainstorming command
 - Prompt covers: what's been done, task context, tech stack, all 13 sections
 - Includes IMPORTANT notes: only update the design doc, this is architecture not implementation, must update scratchpad every turn
+
+### Turn 8 — Brainstorming Review Session (10-min rapid pass)
+- Ran design doc review via `/agentops:enterprise:brainstorm`
+- **4 inconsistency fixes**: Workflow diagram now shows Docling step, sequence diagram includes Docling + Claude + three-layer validation, FINDING table has confidence_score + verification_status, API request payload clarified as parsed content
+- **New Section 9**: Observability & Monitoring — structured logging, 6 key metrics with alert thresholds, health checks, data retention policy
+- **Summary rewritten** (Section 14): Now explicitly maps to the 4 assignment criteria (practical, reliable, extensible, simple)
+- **Implementation plan updated**: Added LLM cross-check service (Phase 2), observability setup (Phase 4), updated data model task
+- Sections renumbered 10-13 → 11-14
+- Document now has 14 sections
